@@ -1,29 +1,52 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import ImageCreator from '../../components/ImageCreator';
 import componentTypes from '@data-driven-forms/react-form-renderer/component-types';
 import {
-  registration,
   review,
   packages,
-  imageSetDetails,
+  updateDetails,
+  registration,
   imageOutput,
 } from './steps';
 import { Spinner } from '@patternfly/react-core';
 import PropTypes from 'prop-types';
 import ReviewStep from '../../components/form/ReviewStep';
-import { createNewImage, loadEdgeImages } from '../../store/actions';
+import {
+  createNewImage,
+  addImageToPoll,
+  loadEdgeImages,
+} from '../../store/actions';
 import { CREATE_NEW_IMAGE_RESET } from '../../store/action-types';
 import { useDispatch } from 'react-redux';
-import { addNotification } from '@redhat-cloud-services/frontend-components-notifications/redux';
+import { useSelector, shallowEqual } from 'react-redux';
+import { RegistryContext } from '../../store';
+import { imageDetailReducer } from '../../store/reducers';
+import { loadImageDetail } from '../../store/actions';
 import { getEdgeImageStatus } from '../../api';
+import { addNotification } from '@redhat-cloud-services/frontend-components-notifications/redux';
 
-const CreateImage = ({ navigateBack }) => {
+const UpdateImage = ({ navigateBack, updateImageID }) => {
   const [user, setUser] = useState();
   const dispatch = useDispatch();
   const closeAction = () => {
     navigateBack();
     dispatch({ type: CREATE_NEW_IMAGE_RESET });
   };
+
+  const { getRegistry } = useContext(RegistryContext);
+  const { data } = useSelector(
+    ({ imageDetailReducer }) => ({ data: imageDetailReducer?.data || null }),
+    shallowEqual
+  );
+
+  useEffect(() => {
+    const registered = getRegistry().register({
+      imageDetailReducer,
+    });
+    loadImageDetail(dispatch, updateImageID);
+    return () => registered();
+  }, [dispatch]);
+
   useEffect(() => {
     (async () => {
       const userData = (await insights?.chrome?.auth?.getUser()) || {};
@@ -41,13 +64,23 @@ const CreateImage = ({ navigateBack }) => {
         setIsSaving(() => true);
         const payload = {
           ...values,
+          Id: data?.ID,
+          name: data?.Name,
+          version: data?.Version + 1,
           architecture: 'x86_64',
+          credentials: values.credentials
+            ? values.credentials
+            : data?.Installer.SshKey,
+          username: values.username
+            ? values.username
+            : data?.Installer.Username,
         };
+
         createNewImage(dispatch, payload, (resp) => {
           dispatch({
             ...addNotification({
               variant: 'info',
-              title: 'Created image',
+              title: 'Update image',
               description: `${resp.value.Name} image was added to the queue.`,
             }),
             meta: {
@@ -92,10 +125,25 @@ const CreateImage = ({ navigateBack }) => {
           });
           closeAction();
           loadEdgeImages(dispatch);
+          dispatch(
+            addImageToPoll({ name: data.value.Name, id: data.value.ID })
+          );
         });
       }}
       defaultArch="x86_64"
-      initialValues={{ version: 0 }}
+      initialValues={{
+        name: data?.Name,
+        isUpdate: true,
+        description: data?.Description,
+        credentials: data?.Installer.SshKey,
+        username: data?.Installer.Username,
+        version: data?.Version,
+        imageType: ['rhel-edge-commit'],
+        'selected-packages': data?.Packages.map((pkg) => ({
+          ...pkg,
+          name: pkg.Name,
+        })),
+      }}
       schema={{
         fields: [
           {
@@ -108,12 +156,12 @@ const CreateImage = ({ navigateBack }) => {
               submit: 'Create image',
             },
             showTitles: true,
-            title: 'Create image',
+            title: `Update image: ${data?.Name}`,
             crossroads: ['target-environment', 'release', 'imageType'],
             // order in this array does not reflect order in wizard nav, this order is managed inside
             // of each step by `nextStep` property!
             fields: [
-              imageSetDetails,
+              updateDetails,
               imageOutput,
               registration,
               packages,
@@ -128,11 +176,12 @@ const CreateImage = ({ navigateBack }) => {
   );
 };
 
-CreateImage.propTypes = {
+UpdateImage.propTypes = {
   navigateBack: PropTypes.func,
+  updateImageID: PropTypes.number,
 };
-CreateImage.defaultProps = {
+UpdateImage.defaultProps = {
   navigateBack: () => undefined,
 };
 
-export default CreateImage;
+export default UpdateImage;

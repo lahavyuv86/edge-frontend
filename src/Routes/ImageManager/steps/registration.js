@@ -1,45 +1,55 @@
 import React from 'react';
 import componentTypes from '@data-driven-forms/react-form-renderer/component-types';
-import { Text } from '@patternfly/react-core';
+import { Text, HelperText, HelperTextItem } from '@patternfly/react-core';
 import validatorTypes from '@data-driven-forms/react-form-renderer/validator-types';
 
 export default {
-  title: 'Registration',
+  title: 'Device registration',
   name: 'registration',
   nextStep: 'packages',
   fields: [
     {
       component: componentTypes.PLAIN_TEXT,
       name: 'description',
-      label: (
-        <Text>
-          A user is required to register the device and make it visible on
-          cloud.redhat.com
-        </Text>
-      ),
+      label: <Text>Use this to log into your device.</Text>,
     },
     {
       component: componentTypes.TEXT_FIELD,
-      name: 'username',
       label: 'Username',
-      helperText:
-        'The user name can only consist of letters from a-z, digits, dots, dashes and underscores.',
+      placeholder: 'Enter username',
+      helperText: (
+        <HelperText>
+          <HelperTextItem className="pf-u-mt-xs" variant="indeterminate">
+            Can only contain letters, numbers, hyphen ( - ), and underscores( _
+            ).
+          </HelperTextItem>
+        </HelperText>
+      ),
+      name: 'username',
       validate: [
         { type: validatorTypes.REQUIRED },
         {
           type: validatorTypes.PATTERN,
           pattern: /^[A-Za-z0-9]+[A-Za-z0-9_-]*$/,
+          message:
+            'Can only contain letters, numbers, hyphen ( - ), and underscores( _ ).',
         },
-        { type: validatorTypes.MIN_LENGTH, threshold: 5 },
+        { type: validatorTypes.MAX_LENGTH, threshold: 50 },
+        { type: 'reservedUsernameValidator' },
       ],
       isRequired: true,
     },
     {
-      component: 'registration-creds',
+      component: 'ssh-input-field',
       name: 'credentials',
-      initialValue: [],
-      clearedValue: [],
-      validate: [{ type: 'registrationCredsValidator' }],
+      validate: [
+        { type: validatorTypes.REQUIRED },
+        {
+          type: validatorTypes.PATTERN,
+          pattern: /^(ssh-(rsa|dss|ed25519)|ecdsa-sha2-nistp(256|384|521)) \S+/,
+        },
+      ],
+      isRequired: true,
     },
   ],
 };

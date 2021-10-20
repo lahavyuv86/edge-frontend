@@ -38,10 +38,40 @@
   padding: 1rem;
 }
 
-.force-padding-left {
-  padding-left: 1rem !important;
-}
-
 .grid-align-center {
   align-self: center;
+}
+
+.add-100vh {
+  height: 100vh
+}
+
+.force-text-black {
+  color: var(--pf-c-dropdown__menu-item--Color);
+}
+
+.remove-underline {
+  text-decoration: none;
+}
+
+[aria-labelledby="image-detail-kebab"] {
+  list-style-type: none;
+  padding-left: 0;
+}
+
+.ins-c-general-information dt {
+  width: 175px;
+}
+
+
+.pf-u-warning-color-200 {
+  color: var(--pf-global--warning-color--200);
+}
+
+.pf-u-success-color-200 {
+  color: var(--pf-global--success-color--200);
+}
+
+.pf-u-danger-color-200 {
+  color: var(--pf-global--danger-color--200);
 }

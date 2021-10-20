@@ -25,12 +25,26 @@ const Packages = ({ defaultArch, ...props }) => {
   const [packagesAvailable, setPackagesAvailable] = useState([]);
   const [packagesSelected, setPackagesSelected] = useState([]);
   const [filterSelected, setFilterSelected] = useState('');
+  const [enterPressed, setEnterPressed] = useState(false);
 
   useEffect(() => {
     setPackagesSelected(
       mapPackagesToComponent(getState()?.values?.[input.name] || [])
     );
+    const availableSearchInput = document.querySelector(
+      '[aria-label="Available search input"]'
+    );
+    availableSearchInput?.addEventListener('keydown', handleSearchOnEnter);
+    return () =>
+      availableSearchInput.removeEventListener('keydown', handleSearchOnEnter);
   }, []);
+
+  useEffect(() => {
+    if (enterPressed) {
+      handlePackagesSearch();
+      setEnterPressed(false);
+    }
+  }, [enterPressed]);
 
   const packageListChange = (newAvailablePackages, newChosenPackages) => {
     const chosenPkgs = newChosenPackages.map(mapComponentToPackage);
@@ -45,7 +59,21 @@ const Packages = ({ defaultArch, ...props }) => {
       getState()?.values?.architecture || defaultArch,
       packagesSearchName.current
     );
-    setPackagesAvailable(mapPackagesToComponent(data || []));
+    const removeChosen = data.filter(
+      (pack) =>
+        !packagesSelected.some(
+          (chosenPkg) =>
+            chosenPkg.props.children[0].props.children === pack.name
+        )
+    );
+    setPackagesAvailable(mapPackagesToComponent(removeChosen || []));
+  };
+
+  const handleSearchOnEnter = (e) => {
+    if (e.key === 'Enter') {
+      e.stopPropagation();
+      setEnterPressed(true);
+    }
   };
 
   return (

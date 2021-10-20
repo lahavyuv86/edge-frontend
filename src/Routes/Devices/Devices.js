@@ -19,15 +19,15 @@ import { RegistryContext } from '../../store';
 import {
   isEmptyFilters,
   constructActiveFilters,
-  onDeleteFilter,
+  //onDeleteFilter,
 } from '../../constants';
 import { Tiles } from '../../components/Tiles';
 import { Bullseye, Spinner } from '@patternfly/react-core';
+import DeviceStatus from './DeviceStatus';
+import { getDeviceHasUpdate } from '../../api';
 
-const CreateImageWizard = React.lazy(() =>
-  import(
-    /* webpackChunkName: "CreateImageWizard" */ '../ImageManager/CreateImageWizard'
-  )
+const UpdateDeviceModal = React.lazy(() =>
+  import(/* webpackChunkName: "CreateImageWizard" */ './UpdateDeviceModal')
 );
 
 const defaultFilters = {
@@ -54,9 +54,11 @@ const deviceStatusMapper = [
 ];
 
 const Devices = () => {
-  const [getEntities, setGetEntities] = useState();
-  const [isOpen, setIsOpen] = useState(false);
-  const [activeFilters, setActiveFilters] = useState(defaultFilters);
+  const [activeFilters] = useState(defaultFilters);
+  const [updateModal, setUpdateModal] = useState({
+    isOpen: false,
+    deviceData: null,
+  });
   const { getRegistry } = useContext(RegistryContext);
   const inventory = useRef(null);
   const history = useHistory();
@@ -70,9 +72,15 @@ const Devices = () => {
   };
 
   useEffect(() => {
+    insights.chrome.registerModule('inventory');
     const searchParams = new URLSearchParams(history.location.search);
-    if (searchParams.get('create_image') === 'true') {
-      setIsOpen(() => true);
+    if (searchParams.get('update_device') === 'true') {
+      setUpdateModal((prevState) => {
+        return {
+          ...prevState,
+          isOpen: true,
+        };
+      });
     }
     return () => dispatch(cleanEntities());
   }, []);
@@ -83,25 +91,80 @@ const Devices = () => {
         <PageHeaderTitle title="Fleet management" />
       </PageHeader>
       <Main className="edge-devices">
-        <Tiles
-          onNewImageClick={() => {
-            history.push({
-              pathname: history.location.pathname,
-              search: new URLSearchParams({
-                create_image: true,
-              }).toString(),
-            });
-            setIsOpen(true);
-          }}
-        />
+        <Tiles />
         <InventoryTable
           ref={inventory}
           onRefresh={onRefresh}
           tableProps={{
             canSelectAll: false,
+            variant: 'compact',
+            actionResolver: (rowData) => {
+              return rowData?.system_profile?.image_data
+                ? [
+                    {
+                      title: 'Update',
+                      onClick: (_event, _index, rowData) => {
+                        setUpdateModal((prevState) => {
+                          return {
+                            ...prevState,
+                            isOpen: true,
+                            deviceData: rowData,
+                          };
+                        });
+                      },
+                    },
+                  ]
+                : [
+                    {
+                      title: 'No Action',
+                    },
+                  ];
+            },
+            areActionsDisabled: (rowData) => {
+              const updateTransactions =
+                rowData?.system_profile?.image_data?.UpdateTransactions || [];
+
+              return (
+                updateTransactions[updateTransactions.length - 1]?.Status ===
+                  'BUILDING' ||
+                updateTransactions[updateTransactions.length - 1]?.Status ===
+                  'CREATED' ||
+                !rowData?.system_profile?.image_data?.ImageInfo
+                  ?.UpdatesAvailable?.length > 0
+              );
+            },
           }}
-          getEntities={async (_i, config) => {
-            const data = await getEntities(undefined, {
+          columns={(defaultColumns) => {
+            const newColumns = defaultColumns.filter((column) =>
+              ['display_name', 'updated'].includes(column.key)
+            );
+            newColumns.filter((col) => col.key === 'updated')[0].props = {
+              width: 20,
+            };
+
+            return [
+              ...newColumns,
+              {
+                key: 'system_profile',
+                title: 'Device status',
+                // eslint-disable-next-line react/display-name
+                renderFunc: (sysProf) => (
+                  <DeviceStatus
+                    rpm_ostree_deployments={sysProf.rpm_ostree_deployments}
+                    imageData={sysProf.image_data}
+                  />
+                ),
+                props: { width: 20, isStatic: true },
+              },
+            ];
+          }}
+          getEntities={async (
+            _items,
+            config,
+            _showTags,
+            defaultGetEntities
+          ) => {
+            const defaultData = await defaultGetEntities(undefined, {
               ...config,
               filter: {
                 ...config.filter,
@@ -115,34 +178,61 @@ const Devices = () => {
                 system_profile: [
                   ...(config?.fields?.system_profile || []),
                   'host_type',
+                  'operating_system',
+                  'greenboot_status',
+                  'greenboot_fallback_detected',
+                  'rpm_ostree_deployments',
                 ],
               },
             });
-            return data;
+
+            const promises = defaultData.results.map(async (device) => {
+              const getImageInfo = await getDeviceHasUpdate(device.id);
+              const imageInfo =
+                !getImageInfo || getImageInfo === 404
+                  ? { data: null }
+                  : getImageInfo;
+              return {
+                ...device,
+                system_profile: {
+                  ...device.system_profile,
+                  image_data: Object.prototype.hasOwnProperty.call(
+                    imageInfo,
+                    'data'
+                  )
+                    ? null
+                    : imageInfo,
+                },
+              };
+            });
+            const rows = await Promise.all(promises);
+            return { ...defaultData, results: rows };
           }}
           hideFilters={{ registeredWith: true }}
-          filterConfig={{
-            items: [
-              {
-                label: activeFilters?.deviceStatus?.label,
-                type: 'checkbox',
-                filterValues: {
-                  onChange: (event, value) => {
-                    setActiveFilters(() => ({
-                      ...(activeFilters || {}),
-                      deviceStatus: {
-                        ...(activeFilters?.deviceStatus || {}),
-                        value,
-                      },
-                    }));
-                    inventory.current.onRefreshData();
-                  },
-                  items: deviceStatusMapper,
-                  value: activeFilters?.deviceStatus?.value || [],
-                },
-              },
-            ],
-          }}
+          // NOTE: add back in when device status is sent with inventory data
+          //filterConfig={{
+          //  items: [
+          //    {
+          //      label: activeFilters?.deviceStatus?.label,
+          //      type: 'checkbox',
+          //      filterValues: {
+          //        onChange: (event, value) => {
+          //          setActiveFilters(() => ({
+          //            ...(activeFilters || {}),
+          //            deviceStatus: {
+          //              ...(activeFilters?.deviceStatus || {}),
+          //              value,
+          //            },
+          //          }));
+          //          inventory.current.onRefreshData();
+          //        },
+          //        items: deviceStatusMapper,
+          //        value: activeFilters?.deviceStatus?.value || [],
+          //      },
+          //    },
+          //  ],
+          //}}
+          hasCheckbox={false}
           activeFiltersConfig={{
             ...(isEmptyFilters(activeFilters) && {
               filters: constructActiveFilters(
@@ -151,27 +241,27 @@ const Devices = () => {
                   deviceStatusMapper.find((item) => item.value === value)?.label
               ),
             }),
-            onDelete: (event, itemsToRemove, isAll) => {
-              if (isAll) {
-                setActiveFilters(defaultFilters);
-              } else {
-                setActiveFilters(() =>
-                  onDeleteFilter(activeFilters, itemsToRemove)
-                );
-              }
-              inventory.current.onRefreshData();
-            },
+            // NOTE: Adding custom onDelete function overrides default inventory deletion behavior
+            //onDelete: (event, itemsToRemove, isAll) => {
+            //  if (isAll) {
+            //    setActiveFilters(defaultFilters);
+            //  } else {
+            //    setActiveFilters(() =>
+            //      onDeleteFilter(activeFilters, itemsToRemove)
+            //    );
+            //  }
+            //  inventory.current.onRefreshData();
+            //},
           }}
-          onRowClick={(_e, id) => history.push(`/devices/${id}`)}
-          onLoad={({ mergeWithEntities, api }) => {
-            setGetEntities(() => api?.getEntities);
+          onRowClick={(_e, id) => history.push(`/fleet-management/${id}`)}
+          onLoad={({ mergeWithEntities }) => {
             getRegistry()?.register?.({
               ...mergeWithEntities(),
             });
           }}
         />
       </Main>
-      {isOpen && (
+      {updateModal.isOpen && (
         <Suspense
           fallback={
             <Bullseye>
@@ -179,11 +269,19 @@ const Devices = () => {
             </Bullseye>
           }
         >
-          <CreateImageWizard
+          <UpdateDeviceModal
             navigateBack={() => {
               history.push({ pathname: history.location.pathname });
-              setIsOpen(false);
+              setUpdateModal((prevState) => {
+                return {
+                  ...prevState,
+                  isOpen: false,
+                };
+              });
             }}
+            setUpdateModal={setUpdateModal}
+            updateModal={updateModal}
+            refreshTable={inventory.current.onRefreshData}
           />
         </Suspense>
       )}

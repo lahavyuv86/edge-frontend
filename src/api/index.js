@@ -8,7 +8,7 @@ import { HostsApi } from '@redhat-cloud-services/host-inventory-client';
 import { generateFilter } from '@redhat-cloud-services/frontend-components-utilities/helpers';
 
 const IMAGE_BUILDER_API = '/api/image-builder/v1';
-const EDGE_API = '/api/edge/v1/';
+const EDGE_API = '/api/edge/v1';
 const randomNumber = (min, max) =>
   Math.round(Math.random() * (max - min) + min);
 const randomString = () => Math.random().toString(36).substr(2, 10);
@@ -155,10 +155,16 @@ export const fetchImageStatus = ({ id }) => {
   return instance.get(`${EDGE_API}/images/${id}/status`);
 };
 
+export const fetchImage = ({ id }) => {
+  return instance.get(`${EDGE_API}/images/${id}`);
+};
+
 export const fetchDeviceSummary = async () => {
   const client = new HostsApi(undefined, '/api/inventory/v1/', instance);
   return await Promise.all([
     client.apiHostGetHostList(
+      undefined,
+      undefined,
       undefined,
       undefined,
       undefined,
@@ -190,6 +196,8 @@ export const fetchDeviceSummary = async () => {
       undefined,
       undefined,
       undefined,
+      undefined,
+      undefined,
       ['stale'],
       undefined,
       undefined,
@@ -212,6 +220,8 @@ export const fetchDeviceSummary = async () => {
       undefined,
       undefined,
       undefined,
+      undefined,
+      undefined,
       ['stale_warning'],
       undefined,
       undefined,
@@ -225,6 +235,8 @@ export const fetchDeviceSummary = async () => {
       }
     ),
     client.apiHostGetHostList(
+      undefined,
+      undefined,
       undefined,
       undefined,
       undefined,
@@ -263,22 +275,104 @@ export const getPackages = async (distribution, architecture, search) => {
 };
 
 export const createImage = ({
+  Id,
+  name,
+  version,
+  description,
   release,
   architecture,
-  imageType,
+  username,
+  credentials,
+  imageType: imageTypes,
   'selected-packages': packages,
 }) => {
+  let [imageType] = imageTypes || [];
+  if (imageTypes.length > 1) {
+    imageType = 'rhel-edge-installer';
+  }
   const payload = {
+    name,
+    version,
+    description,
     distribution: release,
-    imageType,
+    imageType: imageType,
+    packages: packages.map((item) => ({ name: item.name })),
+    outputTypes: imageTypes,
     commit: {
       arch: architecture,
-      packages: packages.map((item) => ({ name: item })),
+    },
+    installer: {
+      username,
+      sshkey: credentials,
     },
   };
-  return instance.post(`${EDGE_API}/images`, payload);
+
+  let endpoint = `${EDGE_API}/images`;
+
+  if (version > 1) {
+    endpoint += `/${Id}/update`;
+  }
+
+  return instance.post(endpoint, payload);
 };
 
-export const fetchEdgeImages = ({ limit = 100, offset = 0 } = {}) => {
-  return instance.get(`${EDGE_API}/images?limit=${limit}&offset=${offset}`);
+export const fetchEdgeImages = (
+  q = {
+    limit: 100,
+    offset: 0,
+    sort_by: '-created_at',
+  }
+) => {
+  const query = Object.keys(q).reduce((acc, curr) => {
+    let value = undefined;
+    if (
+      typeof q[curr] === 'object' &&
+      typeof q[curr].length === 'number' &&
+      q[curr].length > 0
+    ) {
+      value = q[curr].reduce(
+        (multiVals, val) =>
+          multiVals === '' ? `${curr}=${val}` : `${multiVals}&${curr}=${val}`,
+        ''
+      );
+    }
+    if (['string', 'number'].includes(typeof q[curr]) && q[curr] !== '') {
+      value = `${curr}=${q[curr]}`;
+    }
+    return value === undefined
+      ? acc
+      : acc === ''
+      ? `${value}`
+      : `${acc}&${value}`;
+  }, '');
+
+  return instance.get(`${EDGE_API}/images?${query}`);
+};
+
+export const getEdgeImageStatus = (id) => {
+  return instance.get(`${EDGE_API}/images/${id}/status`);
+};
+
+export const getDeviceHasUpdate = async (id) => {
+  try {
+    return await instance.get(`${EDGE_API}/devices/${id}`);
+  } catch (err) {
+    // temp error solution
+    console.log('');
+  }
+};
+
+export const updateDeviceLatestImage = async (payload) => {
+  return await instance.post(`${EDGE_API}/updates`, payload);
+};
+
+export const getImageDataOnDevice = (id) => {
+  return instance.get(`${EDGE_API}/updates/device/${id}/image`);
+};
+
+export const checkImageName = (name) => {
+  const payload = {
+    name,
+  };
+  return instance.post(`${EDGE_API}/images/checkImageName`, payload);
 };

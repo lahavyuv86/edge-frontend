@@ -8,8 +8,11 @@ import PropTypes from 'prop-types';
 import Review from './form/ReviewStep';
 import Packages from './form/Packages';
 import RegistrationCreds from './form/RegistrationCreds';
+import ImageOutputCheckbox from './form/ImageOutputCheckbox';
+import SSHInputField from './form/SSHInputField';
 import AsyncComponent from '@redhat-cloud-services/frontend-components/AsyncComponent';
 import { registrationCredsValidator } from './form/RegistrationCreds';
+import { reservedUsernameValidator } from './form/validators';
 import validatorTypes from '@data-driven-forms/react-form-renderer/validator-types';
 
 /**
@@ -31,6 +34,7 @@ const CreateImageWizard = ({
   onSubmit,
   onClose,
   customComponentMapper,
+  initialValues,
   defaultArch,
 }) => {
   return schema ? (
@@ -42,11 +46,18 @@ const CreateImageWizard = ({
         <Pf4FormTemplate {...props} showFormControls={false} />
       )}
       onSubmit={(formValues) => onSubmit(formValues)}
+      initialValues={initialValues}
       componentMapper={{
         ...componentMapper,
         // wizard: WrappedWizard,
         'registration-creds': {
           component: RegistrationCreds,
+        },
+        'image-output-checkbox': {
+          component: ImageOutputCheckbox,
+        },
+        'ssh-input-field': {
+          component: SSHInputField,
         },
         review: Review,
         'package-selector': {
@@ -58,6 +69,7 @@ const CreateImageWizard = ({
       validatorMapper={{
         ...validatorTypes,
         registrationCredsValidator,
+        reservedUsernameValidator,
       }}
       onCancel={onClose}
     />
@@ -68,6 +80,7 @@ const CreateImageWizard = ({
 
 CreateImageWizard.propTypes = {
   schema: PropTypes.object,
+  initialValues: PropTypes.object,
   onSubmit: PropTypes.func.isRequired,
   onClose: PropTypes.func.isRequired,
   customComponentMapper: PropTypes.shape({

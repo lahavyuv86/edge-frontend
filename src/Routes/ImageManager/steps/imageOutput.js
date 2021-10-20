@@ -5,19 +5,21 @@ import validatorTypes from '@data-driven-forms/react-form-renderer/validator-typ
 import {
   imageTypeMapper,
   releaseMapper,
+  DEFAULT_RELEASE,
 } from '../../ImageManagerDetail/constants';
 
 export default {
-  title: 'Image Output',
+  title: 'Options',
   name: 'imageOutput',
-  nextStep: 'registration',
+  nextStep: ({ values }) =>
+    values?.imageType?.includes('rhel-edge-installer') || !values.imageType
+      ? 'registration'
+      : 'packages',
   fields: [
     {
       component: componentTypes.PLAIN_TEXT,
       name: 'description',
-      label: (
-        <Text>Enter some basic info about the image you are creating</Text>
-      ),
+      label: <Text>Enter some basic information about your image.</Text>,
     },
     {
       component: componentTypes.SELECT,
@@ -27,25 +29,23 @@ export default {
         value: release,
         label: releaseLabel,
       })),
-      initialValue: 'rhel-8',
+      initialValue: DEFAULT_RELEASE,
       validate: [{ type: validatorTypes.REQUIRED }],
       isRequired: true,
       isDisabled: true,
     },
     {
-      component: componentTypes.SELECT,
+      component: 'image-output-checkbox',
       name: 'imageType',
-      label: 'Output Type',
       options: Object.entries(imageTypeMapper).map(
         ([imageType, imageTypeLabel]) => ({
           value: imageType,
           label: imageTypeLabel,
         })
       ),
-      initialValue: 'rhel-edge-installer',
+      initialValue: ['rhel-edge-installer', 'rhel-edge-commit'],
+      clearedValue: [],
       validate: [{ type: validatorTypes.REQUIRED }],
-      isRequired: true,
-      isDisabled: true,
     },
   ],
 };
